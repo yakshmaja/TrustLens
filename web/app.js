@@ -1,5 +1,6 @@
 /* TrustLens client
-   Streams pipeline progress over SSE and renders the report. */
+   Streams pipeline progress over SSE, drives the live lens graphic,
+   and renders the report. */
 
 (function () {
   'use strict';
@@ -10,20 +11,32 @@
   const domainInput     = $('domainInput');
   const analyzeBtn      = $('analyzeBtn');
   const notice          = $('notice');
+  const lensGraphic     = $('lensGraphic');
+  const lensArc         = $('lensArc');
+  const lensScore       = $('lensScore');
   const methodSection   = $('methodSection');
+
   const progressSection = $('progressSection');
+  const progressTitle   = $('progressTitle');
+  const progressTimer   = $('progressTimer');
+  const progressBar     = $('progressBar');
+  const progressCaption = $('progressCaption');
   const stepper         = $('stepper');
+  const stepErrors      = $('stepErrors');
+
   const errorCard       = $('errorCard');
   const errorMessage    = $('errorMessage');
   const errorRetryBtn   = $('errorRetryBtn');
-  const resultsSection  = $('resultsSection');
 
+  const resultsSection  = $('resultsSection');
+  const reportHero      = $('reportHero');
   const scoreCompany    = $('scoreCompany');
   const reportMeta      = $('reportMeta');
-  const scoreValue      = $('scoreValue');
   const scoreBand       = $('scoreBand');
   const scoreMeter      = $('scoreMeter');
   const scoreMeterFill  = $('scoreMeterFill');
+  const gaugeTicks      = $('gaugeTicks');
+  const scoreValue      = $('scoreValue');
   const scoreBadges     = $('scoreBadges');
   const scoreSummary    = $('scoreSummary');
 
@@ -76,24 +89,46 @@
   };
 
   // The model cites collectors by their internal keys
-  const SOURCE_NAMES = {
-    whois: 'WHOIS',
-    website: 'Website',
-    github: 'GitHub',
-    external_search: 'Web search',
-    tavily: 'Web search'
+  const SOURCES = {
+    whois:           { name: 'WHOIS',      color: 'var(--src-whois)' },
+    website:         { name: 'Website',    color: 'var(--src-website)' },
+    github:          { name: 'GitHub',     color: 'var(--src-github)' },
+    external_search: { name: 'Web search', color: 'var(--src-web)' },
+    tavily:          { name: 'Web search', color: 'var(--src-web)' },
+    'web search':    { name: 'Web search', color: 'var(--src-web)' }
   };
 
-  const STATUS_TEXT = {
-    active: 'Running',
-    done: 'Done',
-    error: 'Failed'
+  const STEPS = ['whois', 'website', 'github', 'tavily', 'normalize', 'analysis'];
+
+  // Pipeline step -> node in the hero graphic
+  const GRAPHIC_NODE = {
+    whois: 'whois',
+    website: 'website',
+    github: 'github',
+    tavily: 'web'
   };
+
+  const CAPTIONS = {
+    whois:     (d) => `Looking up who registered ${d} and when`,
+    website:   (d) => `Reading ${d}: homepage, about, team and contact pages`,
+    github:    () => 'Looking for the company\'s GitHub organization and recent activity',
+    tavily:    () => 'Searching the web for funding, founders, reviews and news',
+    normalize: () => 'Combining everything into one evidence packet',
+    analysis:  () => 'Mistral is weighing the evidence. This is usually the longest step'
+  };
+
+  const STATUS_TEXT = { active: 'Running', done: 'Done', error: 'Failed' };
+
+  const GAUGE_LENGTH = 301.6;   // π × 96, the gauge arc
+  const LENS_LENGTH = 339.3;    // 2π × 54, the lens ring
 
   const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   let currentEventSource = null;
   let fullResultData = null;
+  let currentTarget = '';
+  let timerId = null;
+  let stepState = {};
 
 
   // ── Helpers ──────────────────────────────────────────────
@@ -108,16 +143,21 @@
     return text ? text.charAt(0).toUpperCase() + text.slice(1) : '';
   }
 
-  function formatSource(source) {
+  function bandFor(score) {
+    return BANDS.find(band => score >= band.min) || BANDS[BANDS.length - 1];
+  }
+
+  function sourceList(source) {
     return String(source || '')
       .split(/\s*,\s*/)
       .filter(Boolean)
-      .map(part => SOURCE_NAMES[part.toLowerCase()] || part)
-      .join(', ');
+      .map(part => SOURCES[part.toLowerCase()] || { name: part, color: 'var(--ink-3)' });
   }
 
-  function bandFor(score) {
-    return BANDS.find(band => score >= band.min) || BANDS[BANDS.length - 1];
+  function sourceChips(source) {
+    return sourceList(source)
+      .map(s => `<span class="source-chip" style="--c:${s.color}">${escapeHtml(s.name)}</span>`)
+      .join('');
   }
 
   function formatAge(years) {
@@ -128,6 +168,121 @@
     }
     const months = Math.max(1, Math.round(years * 12));
     return `${months} month${months === 1 ? '' : 's'}`;
+  }
+
+  function animateNumber(el, to, duration) {
+    if (reduceMotion) {
+      el.textContent = to;
+      return;
+    }
+    const start = performance.now();
+    function frame(now) {
+      const t = Math.min((now - start) / duration, 1);
+      const eased = 1 - Math.pow(1 - t, 3);
+      el.textContent = Math.round(eased * to);
+      if (t < 1) requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+
+
+  // ── Scroll reveal ────────────────────────────────────────
+
+  const revealObserver = 'IntersectionObserver' in window
+    ? new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12 })
+    : null;
+
+  function observeReveals(root) {
+    root.querySelectorAll('.reveal:not(.is-visible)').forEach(el => {
+      if (revealObserver) revealObserver.observe(el);
+      else el.classList.add('is-visible');
+    });
+  }
+
+
+  // ── Hero graphic ─────────────────────────────────────────
+
+  function resetGraphic() {
+    lensGraphic.classList.remove('is-running', 'is-analyzing', 'has-score');
+    lensGraphic.querySelectorAll('.source').forEach(node => {
+      node.classList.remove('is-active', 'is-done', 'is-error');
+    });
+    lensArc.style.strokeDashoffset = LENS_LENGTH;
+  }
+
+  function setGraphicStep(step, state) {
+    const nodeName = GRAPHIC_NODE[step];
+    if (nodeName) {
+      const node = lensGraphic.querySelector(`.source[data-node="${nodeName}"]`);
+      node.classList.remove('is-active', 'is-done', 'is-error');
+      node.classList.add(`is-${state === 'active' ? 'active' : state === 'done' ? 'done' : 'error'}`);
+    }
+    lensGraphic.classList.toggle('is-analyzing', step === 'analysis' && state === 'active');
+  }
+
+  function showGraphicScore(score, color) {
+    lensGraphic.classList.remove('is-running', 'is-analyzing');
+    lensGraphic.classList.add('has-score');
+    lensGraphic.style.setProperty('--band', color);
+    lensScore.textContent = score;
+    requestAnimationFrame(() => {
+      lensArc.style.strokeDashoffset = LENS_LENGTH * (1 - score / 100);
+    });
+  }
+
+
+  // ── Progress ─────────────────────────────────────────────
+
+  function startTimer() {
+    const started = Date.now();
+    progressTimer.textContent = '0:00';
+    clearInterval(timerId);
+    timerId = setInterval(() => {
+      const seconds = Math.floor((Date.now() - started) / 1000);
+      progressTimer.textContent = `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+    }, 1000);
+  }
+
+  function stopTimer() {
+    clearInterval(timerId);
+    timerId = null;
+  }
+
+  function updateProgressBar() {
+    const done = STEPS.filter(s => stepState[s] === 'done' || stepState[s] === 'error').length;
+    const active = STEPS.some(s => stepState[s] === 'active') ? 0.5 : 0;
+    progressBar.style.width = `${Math.min(100, ((done + active) / STEPS.length) * 100)}%`;
+  }
+
+  function setStep(stepName, state, errorText) {
+    const step = stepper.querySelector(`.step[data-step="${stepName}"]`);
+    if (!step) return;
+
+    stepState[stepName] = state;
+    step.classList.remove('active', 'done', 'error');
+    step.classList.add(state);
+    step.querySelector('.step-status').textContent = STATUS_TEXT[state];
+
+    if (state === 'active') {
+      progressCaption.textContent = CAPTIONS[stepName](currentTarget);
+    }
+
+    if (state === 'error' && errorText) {
+      const name = step.querySelector('.step-name').textContent;
+      const item = document.createElement('li');
+      item.textContent = `${name}: ${errorText}`;
+      stepErrors.appendChild(item);
+    }
+
+    setGraphicStep(stepName, state);
+    updateProgressBar();
   }
 
 
@@ -146,22 +301,27 @@
     progressSection.hidden = true;
     methodSection.hidden = true;
 
+    stepState = {};
     stepper.querySelectorAll('.step').forEach(step => {
       step.classList.remove('active', 'done', 'error');
       step.querySelector('.step-status').textContent = 'Waiting';
-      const err = step.querySelector('.step-error');
-      if (err) err.remove();
     });
+    stepErrors.innerHTML = '';
+    progressBar.style.width = '0';
+    progressCaption.textContent = 'Starting';
 
     [riskGrid, positiveGrid, neutralGrid, evidenceList, missingList, scoreBadges]
       .forEach(el => { el.innerHTML = ''; });
 
+    resultsSection.querySelectorAll('.reveal').forEach(el => el.classList.remove('is-visible'));
     scoreSummary.textContent = '';
     reasoningText.textContent = '';
     rawPre.textContent = '';
-    scoreMeterFill.style.width = '0';
+    scoreValue.textContent = '0';
+    scoreMeterFill.style.strokeDashoffset = GAUGE_LENGTH;
     rawEvidenceSection.open = false;
 
+    resetGraphic();
     fullResultData = null;
   }
 
@@ -173,39 +333,44 @@
   function showError(message) {
     errorMessage.textContent = message;
     errorCard.hidden = false;
-  }
-
-  function setStep(stepName, state, errorText) {
-    const step = stepper.querySelector(`.step[data-step="${stepName}"]`);
-    if (!step) return;
-
-    step.classList.remove('active', 'done', 'error');
-    step.classList.add(state);
-    step.querySelector('.step-status').textContent = STATUS_TEXT[state];
-
-    if (state === 'error' && errorText) {
-      const detail = document.createElement('span');
-      detail.className = 'step-error';
-      detail.textContent = errorText;
-      step.appendChild(detail);
-    }
+    errorCard.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'center' });
   }
 
 
   // ── Report rendering ─────────────────────────────────────
 
-  function renderFinding(signal, type) {
+  function drawGaugeTicks() {
+    if (gaugeTicks.childElementCount) return;
+    const cx = 120, cy = 124, r = 96;
+    const ns = 'http://www.w3.org/2000/svg';
+    [35, 55, 75, 90].forEach(value => {
+      const angle = Math.PI * (1 - value / 100);
+      const cos = Math.cos(angle), sin = Math.sin(angle);
+      const line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', cx + (r + 11) * cos);
+      line.setAttribute('y1', cy - (r + 11) * sin);
+      line.setAttribute('x2', cx + (r + 17) * cos);
+      line.setAttribute('y2', cy - (r + 17) * sin);
+      const label = document.createElementNS(ns, 'text');
+      label.setAttribute('x', cx + (r + 28) * cos);
+      label.setAttribute('y', cy - (r + 28) * sin + 3);
+      label.textContent = value;
+      gaugeTicks.append(line, label);
+    });
+  }
+
+  function renderFinding(signal, type, index) {
     const detail = type === 'neutral'
       ? (signal.explanation || signal.evidence)
       : (signal.evidence || signal.explanation);
 
     return `
-      <li class="finding ${type}">
-        <svg class="finding-icon" viewBox="0 0 16 16" aria-hidden="true">${ICONS[type]}</svg>
+      <li class="finding reveal" style="--delay:${Math.min(index, 6) * 70}ms">
+        <span class="finding-icon"><svg viewBox="0 0 16 16" aria-hidden="true">${ICONS[type]}</svg></span>
         <div>
           <p class="finding-title">${escapeHtml(capitalize(signal.signal))}</p>
           ${detail ? `<p class="finding-text">${escapeHtml(detail)}</p>` : ''}
-          ${signal.source ? `<p class="finding-source">Source: ${escapeHtml(formatSource(signal.source))}</p>` : ''}
+          ${signal.source ? `<div class="finding-sources">${sourceChips(signal.source)}</div>` : ''}
         </div>
       </li>`;
   }
@@ -218,7 +383,7 @@
     return `
       <tr>
         <td>${escapeHtml(item.claim)}</td>
-        <td>${escapeHtml(formatSource(item.source))}</td>
+        <td><div class="source-chips">${sourceChips(item.source)}</div></td>
         <td><span class="strength"><span class="strength-bars" aria-hidden="true">${bars}</span>${escapeHtml(capitalize(level))}</span></td>
       </tr>`;
   }
@@ -237,24 +402,31 @@
 
     const whois = evidence.whois || {};
     const age = formatAge(whois.domain_age_years);
-    if (age) {
-      const year = (whois.creation_date || '').slice(0, 4);
-      facts.push(['Domain age', escapeHtml(year ? `${age} (registered ${year})` : age)]);
-    }
+    const year = (whois.creation_date || '').slice(0, 4);
+    facts.push([
+      'Domain age',
+      age ? escapeHtml(year ? `${age} (since ${year})` : age) : 'Not available'
+    ]);
 
-    const sources = [];
-    if (whois.available) sources.push('WHOIS');
-    if (evidence.website?.available) sources.push('website');
+    const chips = [];
+    if (whois.available) chips.push(['WHOIS', 'var(--src-whois)']);
+    if (evidence.website?.available) chips.push(['Website', 'var(--src-website)']);
     const githubLogin = evidence.github?.available && evidence.github.organization?.login;
-    if (githubLogin) sources.push(`GitHub (${githubLogin})`);
+    if (githubLogin) chips.push([`GitHub · ${githubLogin}`, 'var(--src-github)']);
     const webResults = evidence.external_search?.evidence_statistics?.total_relevant_results;
-    if (webResults) sources.push(`${webResults} web results`);
-    if (sources.length) {
-      facts.push(['Evidence collected', escapeHtml(sources.join(', '))]);
-    }
+    if (webResults) chips.push([`${webResults} web results`, 'var(--src-web)']);
+
+    facts.push([
+      'Evidence collected',
+      chips.length
+        ? `<span class="source-chips">${chips.map(([name, color]) =>
+            `<span class="source-chip" style="--c:${color}">${escapeHtml(name)}</span>`).join('')}</span>`
+        : 'None'
+    ]);
 
     scoreBadges.innerHTML = facts
-      .map(([term, value]) => `<div><dt>${term}</dt><dd>${value}</dd></div>`)
+      .map(([term, value], i) =>
+        `<div class="fact reveal" style="--delay:${i * 70}ms"><dt>${term}</dt><dd>${value}</dd></div>`)
       .join('');
   }
 
@@ -265,7 +437,7 @@
     }
     section.hidden = false;
     countEl.textContent = items.length;
-    list.innerHTML = items.map(item => renderFinding(item, type)).join('');
+    list.innerHTML = items.map((item, i) => renderFinding(item, type, i)).join('');
   }
 
   function renderResults(data) {
@@ -282,18 +454,16 @@
       year: 'numeric', month: 'long', day: 'numeric'
     });
     reportMeta.innerHTML = domain
-      ? `Website <a href="https://${escapeHtml(domain)}" target="_blank" rel="noopener">${escapeHtml(domain)}</a> · ${escapeHtml(date)}`
+      ? `<a href="https://${escapeHtml(domain)}" target="_blank" rel="noopener">${escapeHtml(domain)}</a> · ${escapeHtml(date)}`
       : escapeHtml(date);
 
     // Score
-    const score = Math.max(0, Math.min(100, Number(analysis.trust_score) || 0));
+    const score = Math.max(0, Math.min(100, Math.round(Number(analysis.trust_score) || 0)));
     const band = bandFor(score);
-    scoreValue.textContent = score;
+    reportHero.style.setProperty('--band', band.color);
     scoreBand.textContent = band.label;
-    scoreBand.style.setProperty('--band', band.color);
-    scoreMeter.style.setProperty('--band', band.color);
     scoreMeter.setAttribute('aria-label', `Evidence score ${score} out of 100: ${band.label}`);
-    requestAnimationFrame(() => { scoreMeterFill.style.width = `${score}%`; });
+    drawGaugeTicks();
 
     renderFacts(analysis, data);
     scoreSummary.textContent = analysis.summary || 'No summary was returned.';
@@ -302,8 +472,8 @@
     const risks = analysis.risk_signals || [];
     riskCount.textContent = risks.length;
     riskGrid.innerHTML = risks.length
-      ? risks.map(item => renderFinding(item, 'risk')).join('')
-      : '<li class="empty">No evidence-backed concerns were identified in the collected evidence.</li>';
+      ? risks.map((item, i) => renderFinding(item, 'risk', i)).join('')
+      : '<li class="empty-note">No evidence-backed concerns were identified in the collected evidence.</li>';
 
     renderList(positiveSection, positiveGrid, positiveCount, analysis.positive_signals || [], 'positive');
     renderList(neutralSection, neutralGrid, neutralCount, analysis.neutral_signals || [], 'neutral');
@@ -324,6 +494,18 @@
 
     progressSection.hidden = true;
     resultsSection.hidden = false;
+    observeReveals(resultsSection);
+
+    // Score animations
+    scoreMeterFill.style.strokeDashoffset = GAUGE_LENGTH;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scoreMeterFill.style.strokeDashoffset = GAUGE_LENGTH * (1 - score / 100);
+      });
+    });
+    animateNumber(scoreValue, score, 1400);
+    showGraphicScore(score, band.color);
+
     resultsSection.scrollIntoView({ behavior: reduceMotion ? 'auto' : 'smooth', block: 'start' });
   }
 
@@ -364,7 +546,9 @@
       currentEventSource.close();
       currentEventSource = null;
     }
+    stopTimer();
     setLoading(false);
+    lensGraphic.classList.remove('is-running', 'is-analyzing');
   }
 
   function parse(e) {
@@ -380,7 +564,11 @@
 
     resetUI();
     setLoading(true);
+    currentTarget = query;
+    progressTitle.textContent = `Checking ${query}`;
     progressSection.hidden = false;
+    lensGraphic.classList.add('is-running');
+    startTimer();
     document.title = 'TrustLens · Company due diligence';
 
     currentEventSource = new EventSource(`${API_BASE}?domain=${encodeURIComponent(query)}`);
@@ -388,9 +576,10 @@
     currentEventSource.addEventListener('resolved', (e) => {
       const data = parse(e);
       if (!data) return;
+      currentTarget = data.domain;
+      progressTitle.textContent = `Checking ${data.domain}`;
       showNotice(
-        `Searched for “${escapeHtml(data.input)}” and found the website ` +
-        `<strong>${escapeHtml(data.domain)}</strong>.`
+        `Found the website <strong>${escapeHtml(data.domain)}</strong> for “${escapeHtml(data.input)}”`
       );
     });
 
@@ -417,6 +606,7 @@
         showError('The server sent a result that could not be read.');
       } else if (data.success && data.result?.analysis?.success === false) {
         // Evidence was collected but the assessment step failed
+        progressCaption.textContent = 'Stopped at the assessment step';
         showError(`The assessment step failed: ${data.result.analysis.error || 'unknown error'}`);
       } else if (data.success) {
         renderResults(data.result);
@@ -428,6 +618,7 @@
     currentEventSource.addEventListener('error_event', (e) => {
       const data = parse(e);
       finish();
+      resetGraphic();
       progressSection.hidden = true;
       showError((data && data.error) || 'The check failed.');
     });
@@ -473,5 +664,7 @@
       domainInput.select();
     }
   });
+
+  observeReveals(document);
 
 })();
