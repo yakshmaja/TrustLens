@@ -3,221 +3,237 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="description" content="TrustLens — AI-powered company due diligence. Analyze any company domain for trust signals, risk factors, and evidence-backed assessment." />
-  <title>TrustLens — Company Due Diligence</title>
+  <meta name="description" content="TrustLens checks a company against public evidence: domain records, its website, GitHub activity and independent web coverage." />
+  <meta name="color-scheme" content="light dark" />
+  <title>TrustLens · Company due diligence</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css" />
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🔍</text></svg>" />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%231c1d1f'/><circle cx='15' cy='15' r='7' fill='none' stroke='white' stroke-width='3'/><path d='M20 20l5 5' stroke='white' stroke-width='3' stroke-linecap='round'/></svg>" />
 </head>
 <body>
 
-  <!-- Toast Container -->
-  <div class="toast-container" id="toastContainer"></div>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="./" aria-label="TrustLens home">
+        <svg class="brand-mark" viewBox="0 0 32 32" aria-hidden="true">
+          <rect width="32" height="32" rx="6" />
+          <circle cx="15" cy="15" r="7" />
+          <path d="M20 20l5 5" />
+        </svg>
+        <span>TrustLens</span>
+      </a>
+      <span class="topbar-note">Company due diligence</span>
+    </div>
+  </header>
 
-  <div class="app-container">
+  <main class="wrap">
 
-    <!-- ═══════════════════════════════════════════════════════
-         HERO
-         ═══════════════════════════════════════════════════════ -->
-    <header class="hero">
-      <div class="hero-badge">
-        <span class="dot"></span>
-        AI-Powered Due Diligence
-      </div>
-
-      <h1 class="hero-title">
-        Analyze Any Company<br />
-        with <span class="accent">TrustLens</span>
-      </h1>
-
-      <p class="hero-subtitle">
-        Enter a company name or domain to get an evidence-backed trust assessment
-        powered by WHOIS, GitHub, web scraping, and Mistral AI reasoning.
+    <!-- Search -->
+    <section class="intro" aria-labelledby="introTitle">
+      <h1 id="introTitle">Check a company before you work with it.</h1>
+      <p class="lede">
+        TrustLens gathers public evidence about a company (domain records, its
+        website, GitHub activity and independent web coverage) and reports how
+        well that evidence holds together.
       </p>
 
-      <!-- Search Bar -->
-      <div class="search-container">
-        <form class="search-bar" id="searchForm" autocomplete="off">
-          <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="11" cy="11" r="8"></circle>
-            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-          </svg>
+      <form class="search" id="searchForm" autocomplete="off">
+        <label class="search-label" for="domainInput">Company name or website</label>
+        <div class="search-row">
           <input
             type="text"
             class="search-input"
             id="domainInput"
             placeholder="e.g. Lyzr, stripe.com, openai.com"
+            spellcheck="false"
             required
           />
-          <button type="submit" class="search-btn" id="analyzeBtn">
-            <span class="btn-text">Analyze</span>
-            <span class="btn-spinner"></span>
+          <button type="submit" class="btn btn-primary" id="analyzeBtn">
+            <span class="btn-text">Run check</span>
+            <span class="btn-spinner" aria-hidden="true"></span>
           </button>
-        </form>
-      </div>
-    </header>
+        </div>
+        <p class="search-hint">
+          A check takes about one to two minutes. Try
+          <button type="button" class="example" data-query="stripe.com">stripe.com</button> or
+          <button type="button" class="example" data-query="Lyzr">Lyzr</button>.
+        </p>
+      </form>
 
-
-    <!-- ═══════════════════════════════════════════════════════
-         PROGRESS STEPPER
-         ═══════════════════════════════════════════════════════ -->
-    <section class="progress-section" id="progressSection">
-      <div class="stepper" id="stepper">
-        <div class="step" data-step="whois">
-          <div class="step-circle">1</div>
-          <span class="step-label">WHOIS</span>
-        </div>
-        <div class="step" data-step="website">
-          <div class="step-circle">2</div>
-          <span class="step-label">Website</span>
-        </div>
-        <div class="step" data-step="github">
-          <div class="step-circle">3</div>
-          <span class="step-label">GitHub</span>
-        </div>
-        <div class="step" data-step="tavily">
-          <div class="step-circle">4</div>
-          <span class="step-label">Search</span>
-        </div>
-        <div class="step" data-step="normalize">
-          <div class="step-circle">5</div>
-          <span class="step-label">Normalize</span>
-        </div>
-        <div class="step" data-step="analysis">
-          <div class="step-circle">6</div>
-          <span class="step-label">AI Analysis</span>
-        </div>
-      </div>
+      <p class="notice" id="notice" hidden></p>
     </section>
 
 
-    <!-- ═══════════════════════════════════════════════════════
-         ERROR CARD
-         ═══════════════════════════════════════════════════════ -->
-    <div class="error-card glass-card" id="errorCard">
-      <div class="error-icon">⚠️</div>
-      <div class="error-title">Analysis Failed</div>
-      <div class="error-message" id="errorMessage">Something went wrong while analyzing the domain.</div>
-      <button class="error-retry-btn" id="errorRetryBtn">Try Again</button>
+    <!-- How it works (shown before the first check) -->
+    <section class="method" id="methodSection" aria-labelledby="methodTitle">
+      <h2 class="eyebrow" id="methodTitle">What gets checked</h2>
+      <dl class="method-grid">
+        <div>
+          <dt>Domain records</dt>
+          <dd>Registration date, registrar and name servers from WHOIS.</dd>
+        </div>
+        <div>
+          <dt>Company website</dt>
+          <dd>Homepage content, about, team and contact pages, social links.</dd>
+        </div>
+        <div>
+          <dt>Engineering activity</dt>
+          <dd>The matching GitHub organization and its public repositories.</dd>
+        </div>
+        <div>
+          <dt>Web coverage</dt>
+          <dd>Funding, leadership, reviews and news from independent sources.</dd>
+        </div>
+      </dl>
+    </section>
+
+
+    <!-- Progress -->
+    <section class="progress" id="progressSection" aria-live="polite" hidden>
+      <h2 class="eyebrow">Collecting evidence</h2>
+      <ol class="steps" id="stepper">
+        <li class="step" data-step="whois">
+          <span class="step-index">1</span>
+          <span class="step-name">Domain records <span class="step-source">WHOIS</span></span>
+          <span class="step-status">Waiting</span>
+        </li>
+        <li class="step" data-step="website">
+          <span class="step-index">2</span>
+          <span class="step-name">Company website <span class="step-source">Scraper</span></span>
+          <span class="step-status">Waiting</span>
+        </li>
+        <li class="step" data-step="github">
+          <span class="step-index">3</span>
+          <span class="step-name">Engineering activity <span class="step-source">GitHub</span></span>
+          <span class="step-status">Waiting</span>
+        </li>
+        <li class="step" data-step="tavily">
+          <span class="step-index">4</span>
+          <span class="step-name">Web coverage <span class="step-source">Tavily</span></span>
+          <span class="step-status">Waiting</span>
+        </li>
+        <li class="step" data-step="normalize">
+          <span class="step-index">5</span>
+          <span class="step-name">Evidence packet</span>
+          <span class="step-status">Waiting</span>
+        </li>
+        <li class="step" data-step="analysis">
+          <span class="step-index">6</span>
+          <span class="step-name">Assessment <span class="step-source">Mistral</span></span>
+          <span class="step-status">Waiting</span>
+        </li>
+      </ol>
+    </section>
+
+
+    <!-- Error -->
+    <section class="error-panel" id="errorCard" role="alert" hidden>
+      <h2>The check could not be completed</h2>
+      <p id="errorMessage">Something went wrong while checking this company.</p>
+      <button type="button" class="btn btn-secondary" id="errorRetryBtn">Try again</button>
+    </section>
+
+
+    <!-- Report -->
+    <article class="report" id="resultsSection" hidden>
+
+      <header class="report-head">
+        <p class="eyebrow">Due-diligence report</p>
+        <h2 class="report-company" id="scoreCompany">—</h2>
+        <p class="report-meta" id="reportMeta"></p>
+      </header>
+
+      <div class="verdict">
+        <div class="score">
+          <p class="score-caption">Evidence score</p>
+          <p class="score-figure">
+            <span id="scoreValue">0</span><span class="score-outof">/100</span>
+          </p>
+          <p class="score-band" id="scoreBand"></p>
+          <div class="meter" id="scoreMeter" role="img" aria-label="">
+            <div class="meter-fill" id="scoreMeterFill"></div>
+          </div>
+          <div class="meter-scale" aria-hidden="true">
+            <span style="left:0%">0</span>
+            <span style="left:35%">35</span>
+            <span style="left:55%">55</span>
+            <span style="left:75%">75</span>
+            <span style="left:90%">90</span>
+          </div>
+        </div>
+
+        <dl class="facts" id="scoreBadges"></dl>
+      </div>
+
+      <section class="report-section">
+        <h3>Summary</h3>
+        <p class="prose" id="scoreSummary"></p>
+      </section>
+
+      <section class="report-section" id="riskSection">
+        <h3>Concerns <span class="count" id="riskCount">0</span></h3>
+        <ul class="findings" id="riskGrid"></ul>
+      </section>
+
+      <section class="report-section" id="positiveSection" hidden>
+        <h3>Supporting evidence <span class="count" id="positiveCount">0</span></h3>
+        <ul class="findings" id="positiveGrid"></ul>
+      </section>
+
+      <section class="report-section" id="neutralSection" hidden>
+        <h3>Neutral or inconclusive <span class="count" id="neutralCount">0</span></h3>
+        <ul class="findings" id="neutralGrid"></ul>
+      </section>
+
+      <section class="report-section" id="evidenceTrailSection" hidden>
+        <h3>Key evidence <span class="count" id="evidenceCount">0</span></h3>
+        <table class="evidence-table">
+          <thead>
+            <tr><th scope="col">Claim</th><th scope="col">Source</th><th scope="col">Strength</th></tr>
+          </thead>
+          <tbody id="evidenceList"></tbody>
+        </table>
+      </section>
+
+      <section class="report-section" id="missingSection" hidden>
+        <h3>Not observed / limitations</h3>
+        <ul class="plain-list" id="missingList"></ul>
+      </section>
+
+      <section class="report-section" id="reasoningSection" hidden>
+        <h3>How this assessment was reached</h3>
+        <p class="prose" id="reasoningText"></p>
+      </section>
+
+      <details class="raw" id="rawEvidenceSection">
+        <summary>Raw evidence data</summary>
+        <div class="raw-tabs" id="rawTabs" role="tablist">
+          <button type="button" class="raw-tab active" data-tab="whois">WHOIS</button>
+          <button type="button" class="raw-tab" data-tab="website">Website</button>
+          <button type="button" class="raw-tab" data-tab="github">GitHub</button>
+          <button type="button" class="raw-tab" data-tab="search">Web search</button>
+          <button type="button" class="raw-tab" data-tab="full">Full JSON</button>
+        </div>
+        <pre class="raw-content" id="rawPre"></pre>
+      </details>
+
+      <p class="disclaimer">
+        The evidence score measures how strong and consistent the public evidence
+        is. It is not a probability that the company is legitimate, a financial
+        rating, or a guarantee. Verify important claims using the linked sources.
+      </p>
+    </article>
+
+  </main>
+
+  <footer class="footer">
+    <div class="wrap footer-inner">
+      <span>TrustLens</span>
+      <span>Sources: WHOIS, company website, GitHub, Tavily web search. Analysis by Mistral.</span>
     </div>
-
-
-    <!-- ═══════════════════════════════════════════════════════
-         RESULTS
-         ═══════════════════════════════════════════════════════ -->
-    <main class="results-section" id="resultsSection">
-
-      <!-- Score Hero -->
-      <div class="score-hero glass-card" id="scoreHero">
-        <div class="score-ring-container">
-          <div class="score-ring-bg"></div>
-          <div class="score-ring" id="scoreRing"></div>
-          <div class="score-ring-inner">
-            <div class="score-value" id="scoreValue">0</div>
-            <div class="score-label">Trust Score</div>
-          </div>
-        </div>
-        <div class="score-meta">
-          <div class="score-company" id="scoreCompany">—</div>
-          <div class="score-badges" id="scoreBadges"></div>
-          <div class="score-summary" id="scoreSummary"></div>
-        </div>
-      </div>
-
-      <!-- Positive Signals -->
-      <div id="positiveSection" style="display:none;">
-        <div class="section-heading">
-          <div class="section-heading-icon positive">✓</div>
-          <div class="section-heading-text">Positive Signals</div>
-          <div class="section-heading-count" id="positiveCount">0</div>
-        </div>
-        <div class="signals-grid" id="positiveGrid"></div>
-      </div>
-
-      <!-- Neutral Signals -->
-      <div id="neutralSection" style="display:none;">
-        <div class="section-heading">
-          <div class="section-heading-icon neutral">•</div>
-          <div class="section-heading-text">Neutral / Inconclusive</div>
-          <div class="section-heading-count" id="neutralCount">0</div>
-        </div>
-        <div class="signals-grid" id="neutralGrid"></div>
-      </div>
-
-      <!-- Risk Signals -->
-      <div id="riskSection" style="display:none;">
-        <div class="section-heading">
-          <div class="section-heading-icon risk">!</div>
-          <div class="section-heading-text">Evidence-Backed Concerns</div>
-          <div class="section-heading-count" id="riskCount">0</div>
-        </div>
-        <div class="signals-grid" id="riskGrid"></div>
-      </div>
-
-      <!-- Evidence Trail -->
-      <div class="evidence-trail" id="evidenceTrailSection" style="display:none;">
-        <div class="section-heading">
-          <div class="section-heading-icon evidence">⟡</div>
-          <div class="section-heading-text">Evidence Trail</div>
-          <div class="section-heading-count" id="evidenceCount">0</div>
-        </div>
-        <div class="evidence-list" id="evidenceList"></div>
-      </div>
-
-      <!-- Missing Information -->
-      <div class="missing-info" id="missingSection" style="display:none;">
-        <div class="section-heading">
-          <div class="section-heading-icon missing">?</div>
-          <div class="section-heading-text">Limitations / Not Observed</div>
-        </div>
-        <div class="missing-list" id="missingList"></div>
-      </div>
-
-      <!-- Reasoning -->
-      <div class="reasoning-section" id="reasoningSection" style="display:none;">
-        <div class="section-heading">
-          <div class="section-heading-icon reasoning">✦</div>
-          <div class="section-heading-text">AI Assessment Reasoning</div>
-        </div>
-        <div class="reasoning-block glass-card">
-          <div class="reasoning-text" id="reasoningText"></div>
-        </div>
-      </div>
-
-      <!-- Raw Evidence -->
-      <div class="raw-evidence-section" id="rawEvidenceSection" style="display:none;">
-        <button class="raw-toggle-btn" id="rawToggleBtn">
-          <span>View Raw Evidence Data</span>
-          <svg class="chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="6 9 12 15 18 9"></polyline>
-          </svg>
-        </button>
-        <div class="raw-drawer" id="rawDrawer">
-          <div class="raw-tabs" id="rawTabs">
-            <button class="raw-tab active" data-tab="whois">WHOIS</button>
-            <button class="raw-tab" data-tab="website">Website</button>
-            <button class="raw-tab" data-tab="github">GitHub</button>
-            <button class="raw-tab" data-tab="search">Search</button>
-            <button class="raw-tab" data-tab="full">Full JSON</button>
-          </div>
-          <div class="raw-content">
-            <pre id="rawPre"></pre>
-          </div>
-        </div>
-      </div>
-
-    </main>
-
-
-    <!-- ═══════════════════════════════════════════════════════
-         FOOTER
-         ═══════════════════════════════════════════════════════ -->
-    <footer class="footer">
-      <div class="footer-text">
-        Powered by <span class="brand">TrustLens</span> · WHOIS · GitHub · Tavily · Mistral AI
-      </div>
-    </footer>
-
-  </div>
+  </footer>
 
   <script src="app.js"></script>
 </body>
